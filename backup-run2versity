@@ -1,0 +1,77 @@
+#!/bin/bash
+#
+
+source "/gale/netapp/home/seq/bin/demux/demux-constants"
+source "/gale/netapp/home/seq/bin/demux/date-time"
+#source "/gale/netapp/home/seq/bin/demux/submit2q"
+source "/gale/netapp/home/seq/bin/backup/submit-backup2q"
+
+proc_threads="1"
+read_threads="1"
+write_threads="1"
+VMEM="8G"
+
+usage() {
+echo "Usage: backup-run -s /gale/netapp/seq2/illumina_runs/190416_A00280_0047_AHKF2CDSXX" 
+echo "-s        path to source directory"
+echo "-t        path to temporary directory containing tars"
+echo "-f        force backup to versity even if backup already exists"
+}
+
+while getopts ":s:t:fh" opt; do
+  case $opt in
+    s) src_path=$OPTARG ;;
+    t) tar_parent=$OPTARG ;;
+    f) force_rsync=true ;;
+    h) 
+      usage
+      exit 1
+      ;;
+    \?)
+      echo "Invalid option: -$OPTARG"
+      usage
+      exit 1
+      ;;
+  esac
+done
+
+[ -z $tar_parent ] && echo "$(date_time) INFO: Tar parent directory option not specified. Using /gale/oberon/data4/tars" && tar_parent=/gale/oberon/data4/tars
+
+#write variables to config file,
+#and source the file for use in this script
+source $(configure-backup "$src_path" "$tar_parent")
+echo "$(date_time) INFO: Sourcing config file: $config_path"
+
+rsync2versity () {
+  echo "$(date_time) INFO: $qsub_versity_dir_path"
+  echo "$(date_time) INFO: Backing up to versity:"
+  echo $rsync_dir_commandline 
+  echo "$(date_time) INFO: Calling $(which submit-backup2q)"
+  submit-backup2q "$rsync_dir_commandline" "$qsub_versity_dir_path" "$qsub_versity_dir_name" "$versity_dir_path" "$dir_name" "$config_path"
+}
+
+#remove thumbnail images prior to backing up
+echo "$(date_time) INFO: Removing Thumbnail_Images directory if present."
+[ -d $thumbnail_path ] && rm -rf $thumbnail_path 
+
+if [ "$force_rsync" = "true" ]; then
+  echo "$(date_time) INFO: Forcing rsync"
+  rsync2versity
+else
+  echo "$(date_time) INFO: Checking if the directory has been previously rsynced..."
+  #check if run has been rsynced and rsync if necessary
+  if [ ! $(grep -q -w $dir_name $RSYNCED) ] ; then 
+    rsync2versity
+  else 
+    "$(date_time) WARNING: This run has previously been rsynced to versity."
+  fi
+fi
+
+
+##tar and upload bcl
+#echo "$(date_time) INFO: Tarring and uploading bcl to cloud:"
+#echo $upload_dir_commandline
+#submit2q "$upload_dir_commandline" "$qsub_upload_dir_path" "$qsub_upload_dir_name" "$dir_tar_path" "$dir_name" "$config_path"
+
+
+exit 0

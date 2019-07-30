@@ -1,0 +1,77 @@
+#!/bin/bash
+#
+
+source "/gale/netapp/home/seq/bin/demux/demux-constants"
+source "/gale/netapp/home/seq/bin/demux/date-time"
+#source "/gale/netapp/home/seq/bin/demux/submit2q"
+source "/gale/netapp/home/seq/bin/backup/submit-backup2q"
+
+DEFAULT_TAR_DIR="/gale/oberon/data4/tars"
+
+usage() {
+echo "Usage: backup-run -s /gale/netapp/seq2/illumina_runs/190416_A00280_0047_AHKF2CDSXX" 
+echo "-b        Backup to perform. Options are:"
+echo "            v: versity"
+echo "            o: oracle"
+echo "            b: both"
+echo "-f        Force backup if backups already exist. Options are:"
+echo "            v: versity"
+echo "            o: oracle"
+echo "            b: both"
+echo "-s        path to source directory"
+echo "-t        temp directory to place tar.gz for uploading"
+echo "            (default: $DEFAULT_TAR_DIR)"
+}
+
+while getopts ":b:f:s:t:h" opt; do
+  case $opt in
+    b) backup=$OPTARG ;;
+    f) force=$OPTARG ;;
+    s) src_path=$OPTARG ;;
+    t) tar_parent=$OPTARG ;;
+    h) 
+      usage
+      exit 1
+      ;;
+    \?)
+      echo "Invalid option: -$OPTARG"
+      usage
+      exit 1
+      ;;
+  esac
+done
+
+[ -z $backup ] && backup="b"
+
+
+case $backup in
+  v)
+    if [ "$force" = "v" ] ; then
+      echo "$(date_time) INFO: Forcing rsync"
+    else
+      echo "$(date_time) INFO: Checking if the directory has already been rsynced..."
+    fi
+    ;;
+  o)
+    if [ "$force" = "o" ] ; then
+      echo "$(date_time) INFO: Forcing upload"
+    else
+      echo "$(date_time) INFO: Checking if the directory has already been uploaded..."
+    fi
+    ;;
+  b)
+    if [ "$force" = "v" ] ; then  
+       echo "$(date_time) INFO: Forcing rsync"
+       echo "$(date_time) INFO: Checking if the directory has already been uploaded..."
+    elif [ "$force" = "o" ] ; then
+      echo "$(date_time) INFO: Checking if the directory has already been rsynced..."
+      echo "$(date_time) INFO: Forcing upload"
+    elif [ "$force" = "b" ]; then
+      echo "$(date_time) INFO: Forcing rsync"
+      echo "$(date_time) INFO: Forcing upload"
+    else 
+      echo "$(date_time) INFO: Checking if the directory has already been rsynced..."
+      echo "$(date_time) INFO: Checking if the directory has already been uploaded..."
+    fi
+    ;;
+esac

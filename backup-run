@@ -1,0 +1,63 @@
+#!/bin/bash
+#
+
+source "/gale/netapp/home/seq/bin/demux/demux-constants"
+source "/gale/netapp/home/seq/bin/demux/date-time"
+source "/gale/netapp/home/seq/bin/demux/submit2q"
+
+proc_threads="1"
+read_threads="1"
+write_threads="1"
+VMEM="8G"
+
+usage() {
+echo "Usage: backup-run -s /gale/netapp/seq2/illumina_runs/190416_A00280_0047_AHKF2CDSXX" 
+echo "-s        path to source directory"
+echo "-t        path to temporary directory containing tars"
+}
+
+while getopts ":s:t:h" opt; do
+  case $opt in
+    s) src_path=$OPTARG ;;
+    t) tar_parent=$OPTARG ;;
+    h) 
+      usage
+      exit 1
+      ;;
+    \?)
+      echo "Invalid option: -$OPTARG"
+      usage
+      exit 1
+      ;;
+  esac
+done
+
+[ -z $tar_parent ] && echo "Please specify directory to place tar file with -t option" && exit 1
+
+#write variables to config file,
+#and source the file for use below
+source $(configure-backup "$src_path" "$tar_parent")
+
+#remove thumbnail images prior to backing up
+echo "$(date_time) INFO: Removing Thumbnail_Images directory if present."
+[[ -d $thumbnail_path/L001 || -d $thumbnail_path/L002 || \
+   -d $thumbnail_path/L003 || -d $thumbnail_path/L004 || \
+   -d $thumbnail_path/L005 || -d $thumbnail_path/L006 || \
+   -d $thumbnail_path/L007 || -d $thumbnail_path/L008 ]] && \
+   rm -rf $thumbnail_path
+echo
+
+sleep 60
+
+#rsync bcl to versity
+echo "$(date_time) INFO: Backing up bcl to versity:"
+echo $rsync_dir_commandline
+submit2q "$rsync_dir_commandline" "$qsub_versity_dir_path" "$qsub_versity_dir_name" "$versity_dir_path" "$dir_name" "$config_path"
+
+#tar and upload bcl
+echo "$(date_time) INFO: Tarring and uploading bcl to cloud:"
+echo $upload_dir_commandline
+submit2q "$upload_dir_commandline" "$qsub_upload_dir_path" "$qsub_upload_dir_name" "$dir_tar_path" "$dir_name" "$config_path"
+
+
+exit 0

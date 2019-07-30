@@ -1,0 +1,79 @@
+#!/bin/bash
+#
+#usage:
+#
+#submit2q commandline2submit qsubpath qsubdir dir2chk
+#
+#input: path to bcl2fastq-config file
+#
+
+source "/gale/netapp/home/seq/bin/demux/demux-constants"
+source "/gale/netapp/home/seq/bin/demux/date-time"
+status_parent="/gale/netapp/seq2/illumina_runs/.status/"
+
+submit-backup2q () {
+
+  #arguments passed to function
+  commandline2submit="$1"
+  qsubpath="$2"
+  qsubdir="$3"
+  dir2chk="$4" #tar or versity paths
+  dirname="$5" 
+  configuration="$6"
+
+  if echo $commandline2submit | grep -q rsync ; then
+    prefix="versity"
+    sge_threads=1
+    sge_vmem=2G
+    status_file="rsynced"
+
+  elif echo $commandline2submit | grep -q upload ; then
+    prefix="oracle"
+    sge_threads=15
+    sge_vmem=1G
+    status_file="uploaded"
+
+  fi
+
+    #prepare submission dir
+    echo "$(date_time) INFO: Making qsub directory: $qsubpath"
+    #make the submission directory if it doesn't exist
+    [ -d $qsubpath ] || mkdir $qsubpath
+    cd $qsubpath
+
+    #write commandline2submit to commands script file
+    echo "$commandline2submit" > $qsubpath/$QSUB_COMMANDS_SCRIPT
+    
+    echo "$(date_time) INFO: Submitting to the SGE."
+    
+    echo "$(date_time) INFO: $(echo $commandline2submit)"
+   
+    echo "$(date_time) INFO: Calling $(which 2q)"
+ 
+    2q -p $prefix -c $BACKUPQUEUECONFIG -t $sge_threads -v $sge_vmem
+
+    jobid="$(qstatx | grep "$qsubdir" | awk '{print $1}')"
+    
+    #echo $node
+    
+    q_submission_file="$qsubpath/$COMMANDS2SUBMIT"
+    
+    qsub_command_string=$(cat $q_submission_file)
+    
+    echo "$(date_time) INFO: Job submittted. Sending notification email."
+    
+    {
+    echo -e "Command-line invocation:" ; \
+    echo -e "$commandline2submit\n" ; \
+    echo -e "SGE invocation:" ; \
+    echo -e "$qsub_command_string\n" ; \
+    echo -e "jobnumber:" ; \
+    echo -e "$jobid\n" ; \
+    echo -e "SGE logs:" ; \
+    echo -e "$qsubpath\n" ; \
+    echo -e "configuration file:" ; \
+    echo -e "$configuration"
+    } | mail -s "$dirname" -c "$CC" "$RECIPIENT"
+  
+  
+}

@@ -1,0 +1,87 @@
+#!/bin/bash
+#takes a list of directories and makes a list of
+#rsync commands
+
+source "/gale/netapp/home/seq/bin/demux/demux-constants"
+source "/gale/netapp/home/seq/bin/demux/date-time"
+source "/gale/netapp/home/seq/bin/demux/submit2q"
+
+usage() {
+echo "Usage: list2backup -l list -s /gale/netapp/seq2/illumina_runs -d"
+echo "-l        file containing a list of directories or files"
+echo "-s        path to source parent directory where files reside"
+#echo "-t        temp directory to put tar files"
+echo "-f        force versity backup even if backup exists"
+echo "-h        display this help message"
+}
+
+while getopts ":l:s:t:fh" opt; do
+  case $opt in
+    l) LISTFILE=$OPTARG;;
+    s) SRC=$OPTARG;;
+    t) tar_parent=$OPTARG;;
+    f) force_rsync="true";;
+    h)
+      usage
+      exit 1;;
+    \?)
+      echo "Invalid option: -$OPTARG" >&2
+      ;;
+  esac
+done
+
+#remove trailing slashes
+SRC=${SRC%%+(/)}
+tar_parent=${tar_parent%%+(/)}
+
+#[ -z $tar_parent ] && echo "Please specify directory to place tar file with -t option" && exit 1
+
+listuploads() {
+  upjobs=$(cat /gale/netapp/seq2/illumina_runs/.status/uploading)
+  echo $upjobs
+}
+
+listrsyncs() {
+  syncjobs=$(cat /gale/netapp/seq2/illumina_runs/.status/rsyncing)
+  echo $syncjobs
+}
+
+while read run_folder ; do
+
+  echo "$(date_time) INFO: Checking queue config $BACKUPQUEUECONFIG"
+
+  max_jobs=$(cat $BACKUPQUEUECONFIG | jq -r '.max_jobs')
+  echo "$(date_time) INFO: Max jobs allowed is $max_jobs"
+
+  wait_time=$(cat $BACKUPQUEUECONFIG | jq -r '.wait_time')
+  echo "$(date_time) INFO: Wait time between submission attempts is $(( $wait_time/60 )) minutes"
+
+#  echo "$(date_time) INFO: Checking number of upload and rsync jobs..."
+
+#  echo "$(date_time) INFO: Uploading $(listuploads), $(echo $(listuploads) | wc -w ) jobs"
+
+#  echo "$(date_time) INFO: Rsyncing $(listrsyncs), $(echo $(listrsyncs) | wc -w ) jobs"
+
+#  until (( $(echo $(listuploads) | wc -w) < $max_jobs )) && (( $(echo $(listrsyncs) | wc -w) < $max_jobs)) ; do
+  
+#    echo "$(date_time) INFO: Too many jobs running. Waiting $(( $wait_time/60 )) minutes."
+ 
+#    sleep $wait_time
+
+#    wait_time=$(cat $BACKUPQUEUECONFIG | jq -r '.wait_time')
+
+#    max_jobs=$(cat $BACKUPQUEUECONFIG | jq -r '.max_jobs')
+
+#  done
+
+  echo "$(date_time) INFO: Attempting to rsync $SRC/$run_folder"
+
+  [ "$force_rsync" = "true" ] && \
+    echo "$(date_time) INFO: Force rsync = true" && \
+    echo "$(date_time) INFO: Calling $(which backup-run2versity)" && \
+    backup-run2versity -s "$SRC/$run_folder" -t "$tar_parent" -f || \
+    backup-run2versity -s "$SRC/$run_folder" -t "$tar_parent"
+
+  #sleep 30
+
+done < $LISTFILE

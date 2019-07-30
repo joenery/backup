@@ -1,0 +1,85 @@
+#!/bin/bash
+#input: complete path to run
+#output: bcl2fastq-config file containing variables for the run
+
+#dependencies
+source  ~/bin/demux/var2file
+source ~/bin/demux/demux-constants
+
+dir_path=$1
+[ ! -z $2 ] && TAR_PARENT=$2 || TAR_PARENT="/gale/oberon/data5/tars"
+
+dir_name="$(echo $dir_path | awk -F/ '{print $NF}')"
+
+config_dir_path="$DEMUX_CONFIG_PARENT/$dir_name"
+
+config_path="$config_dir_path/backup-config"
+
+mkdir -p $config_dir_path
+
+echo "#!/bin/bash" > "$(echo $config_path)"
+
+var2file "config_path" "$(echo $config_path)"
+
+var2file "dir_path" "$(echo $config_path)"
+
+var2file "dir_name" $(echo $config_path)
+
+run_year="$(echo ${dir_name: 0:2})"
+
+pause_backup_comp_check=1800
+
+run_year="20"$run_year
+
+var2file "run_year" $(echo $config_path)
+
+var2file "pause_backup_comp_check" $(echo $config_path)
+
+versity_year_path="$VERSITY/$run_year"
+var2file "versity_year_path" $(echo $config_path)
+
+prefix="versity-"
+
+qsub_versity_dir_name="$prefix$dir_name"
+var2file "qsub_versity_dir_name" $(echo $config_path)
+
+qsub_versity_dir_path="$QSUB_V/$qsub_versity_dir_name"
+var2file "qsub_versity_dir_path" $(echo $config_path)
+
+rsync_dir_commandline="echo $dir_name >> $RSYNCING && \
+rsync -avsz $dir_path $versity_year_path && \
+(ex +g/^"$dir_name"$/d -cwq $RSYNCING && \
+echo $dir_name >> $RSYNCED) && \
+chmod -R g+X $versity_year_path/$dir_name"
+
+var2file "rsync_dir_commandline" $(echo $config_path)
+
+versity_dir_path="$versity_year_path/$dir_name"
+var2file "versity_dir_path" $(echo $config_path)
+
+prefix="oracle-"
+
+qsub_upload_dir_name="$prefix$dir_name"
+var2file "qsub_upload_dir_name" $(echo $config_path)
+
+qsub_upload_dir_path="$QSUB_U/$qsub_upload_dir_name"
+var2file "qsub_upload_dir_path" $(echo $config_path)
+
+dir_tar_path="$TAR_PARENT/$dir_name.$EXT"
+var2file "dir_tar_path" $(echo $config_path)
+
+upload_dir_commandline="echo $dir_name >> $UPLOADING && \
+$TAR_COMMAND $dir_tar_path $dir_path && \
+$CLOUD_COMMAND $dir_tar_path && \
+(ex +g/^"$dir_name"$/d -cwq $UPLOADING && \
+echo $dir_name >> $UPLOADED && \
+rm -v $dir_tar_path)"
+
+var2file "upload_dir_commandline" $(echo $config_path)
+
+thumbnail_path="$dir_path/Thumbnail_Images"
+var2file "thumbnail_path" $(echo $config_path)
+
+var2file "config_path" $(echo $config_path)
+
+echo $config_path

@@ -1,0 +1,139 @@
+#!/bin/bash
+#
+
+source "/gale/netapp/home/seq/bin/demux/demux-constants"
+source "/gale/netapp/home/seq/bin/demux/date-time"
+#source "/gale/netapp/home/seq/bin/demux/submit2q"
+source "/gale/netapp/home/seq/bin/backup/submit-backup2q"
+
+DEFAULT_TAR_DIR="/gale/raidix/rdx-2/tars"
+
+usage() {
+echo "Usage: backup -vo -s /gale/netapp/seq2/illumina_runs/190416_A00280_0047_AHKF2CDSXX" 
+echo "-v        rsync to versity"
+echo "-o        upload to oracle"
+echo "-V        force rsync to versity even if it's already been done"
+echo "-O        force upload to oracle even if it's already been done"
+echo "-s        path to source directory"
+echo "-c        path to config directory"
+echo "-t        temp directory to place tar.gz for uploading if uploading to oracle"
+echo "            (default: $DEFAULT_TAR_DIR)"
+}
+
+while getopts ":s:t:voVOh" opt; do
+  case $opt in
+    v) versity_backup="backup" ;; 
+    o) oracle_backup="backup" ;;
+    V) versity_force="force" ;;
+    O) oracle_force="force" ;;
+    s) src_path=$OPTARG ;;
+    t) tar_parent=$OPTARG ;;
+    h) 
+      usage
+      exit 1
+      ;;
+    \?)
+      echo "Invalid option: -$OPTARG"
+      usage
+      exit 1
+      ;;
+  esac
+done
+
+[ -z $tar_parent ] && \
+  echo "$(date_time) INFO: Tar parent directory option not specified. Using $DEFAULT_TAR_DIR." && \
+  tar_parent="$DEFAULT_TAR_DIR"
+
+#write variables to config file,
+#and source the file for use in this script
+source $(configure-backup "$src_path" "$tar_parent")
+echo "$(date_time) INFO: Sourcing config file: $config_path"
+
+submit_versity () {
+  echo "$(date_time) INFO: $qsub_versity_dir_path."
+  echo "$(date_time) INFO: Command line invocation for Rsyncing to versity:"
+  echo "$rsync_dir_commandline"
+  echo "$(date_time) INFO: Calling $(which submit-backup2q)"
+
+  submit-backup2q \
+    "$rsync_dir_commandline" \
+    "$qsub_versity_dir_path" \
+    "$qsub_versity_dir_name" \
+    "$versity_dir_path" \
+    "$dir_name" \
+    "$config_path"
+}
+
+backup2versity () {
+  grep -q -w $dir_name $RSYNCED && \
+    echo "$(date_time) INFO: $dir_name has already been rsynced! Skipping rsync." || \
+    (echo "$(date_time) INFO: $dir_name has not been rsynced." && submit_versity)
+}
+
+force2versity () {
+  echo "$(date_time) INFO: Forcing rsync!"
+  submit_versity
+}
+
+submit_oracle () {
+  echo "$(date_time) INFO: $qsub_upload_dir_path."
+  echo "$(date_time) INFO: Command line invocation for uploading up to oracle:"
+  echo "$upload_dir_commandline"
+  echo "$(date_time) INFO: Calling $(which submit-backup2q)"
+
+  submit-backup2q \
+    "$upload_dir_commandline" \
+    "$qsub_upload_dir_path" \
+    "$qsub_upload_dir_name" \
+    "$upload_dir_path" \
+    "$dir_name" \
+    "$config_path"
+}
+
+backup2oracle () {
+  grep -q -w $dir_name $UPLOADED && \
+    echo "$(date_time) INFO: $dir_name has already been uploaded! Skipping upload." || \
+    (echo "$(date_time) INFO: $dir_name has not been uploaded." && submit_oracle)
+}
+
+force2oracle () {
+  echo "$(date_time) INFO: Forcing upload!"
+  submit_oracle
+}
+
+submit_archive () {
+  echo "$(date_time) INFO: $qsub_archive_dir_path."
+  echo "$(date_time) INFO: Command line invocation for Rsyncing to versity:"
+  echo "$archive_dir_commandline"
+  echo "$(date_time) INFO: Calling $(which submit-backup2q)"
+
+  submit-archive2q \
+    "$archive_dir_commandline" \
+    "$qsub_archive_dir_path" \
+    "$qsub_archive_dir_name" \
+    "$archive_dir_path" \
+    "$dir_name" \
+    "$config_path"
+}
+
+archive2tape () {
+  grep -q -w $dir_name $ARCHIVED && \
+    echo "$(date_time) INFO: $dir_name has already been archived! Skipping archive." || \
+    (echo "$(date_time) INFO: $dir_name has not been archiveded." && submit_archive)
+}
+
+remove_thumbnails () {
+  #remove thumbnail images prior to backing up
+  echo "$(date_time) INFO: Removing Thumbnail_Images directory if present."
+  [ -d $thumbnail_path ] && rm -rf $thumbnail_path 
+}
+
+remove_thumbnails
+
+[ $versity_force ] && force2versity && versity_backup=
+
+[ $oracle_force ]  && force2oracle && oracle_backup=
+
+[ $versity_backup ] && backup2versity
+
+[ $oracle_backup ] && backup2oracle
